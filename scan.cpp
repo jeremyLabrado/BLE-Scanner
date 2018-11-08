@@ -25,11 +25,14 @@
 
 using namespace Platform;
 using namespace Windows::Devices;
+using namespace std
 
 auto serviceUUID = Bluetooth::BluetoothUuidHelper::FromShortId(0xffe5);
 auto characteristicUUID = Bluetooth::BluetoothUuidHelper::FromShortId(0xffe9);
 
 std::wstring formatBluetoothAddress(unsigned long long BluetoothAddress) {
+	cout << "formatBluetoothAddress() " << std::endl;
+	cout << BluetoothAddress;
 	std::wostringstream ret;
 	ret << std::hex << std::setfill(L'0')
 		<< std::setw(2) << ((BluetoothAddress >> (5 * 8)) & 0xff) << ":"
@@ -42,6 +45,7 @@ std::wstring formatBluetoothAddress(unsigned long long BluetoothAddress) {
 }
 
 concurrency::task<void> setColor(Bluetooth::GenericAttributeProfile::GattCharacteristic^ characteristic, byte red, byte green, byte blue) {
+	cout << "setColor()" << std::endl;
 	auto writer = ref new Windows::Storage::Streams::DataWriter();
 	auto data = new byte[7]{ 0x56, red, green, blue, 0x00, 0xf0, 0xaa };
 	writer->WriteBytes(ref new Array<byte>(data, 7));
@@ -50,12 +54,21 @@ concurrency::task<void> setColor(Bluetooth::GenericAttributeProfile::GattCharact
 }
 
 concurrency::task<void> connectToBulb(unsigned long long bluetoothAddress) {
+	cout << "connectToBulb() " << std::endl;
+	cout << "address: " << bluetoothAddress << std::endl;
+	cout << "service filter: " << serviceUUID << std::endl;
 	auto leDevice = co_await Bluetooth::BluetoothLEDevice::FromBluetoothAddressAsync(bluetoothAddress);
 	auto servicesResult = co_await leDevice->GetGattServicesForUuidAsync(serviceUUID);
 	auto service = servicesResult->Services->GetAt(0);
 	auto characteristicsResult = co_await service->GetCharacteristicsForUuidAsync(characteristicUUID);
 	auto characteristic = characteristicsResult->Characteristics->GetAt(0);
 
+	cout << "leDevice: " << leDevice << std::endl;
+	cout << "servicesResult: " << servicesResult << std::endl;
+	cout << "service: " << service << std::endl;
+	cout << "characteristicsResult: " << characteristicsResult << std::endl;
+	cout << "characteristic: " << characteristic << std::endl;
+	cout << "TODO: Set up notification" << std::endl;
 	co_await setColor(characteristic, 0, 0xff, 0); // Green
 
 	for (;;) {
@@ -68,6 +81,8 @@ concurrency::task<void> connectToBulb(unsigned long long bluetoothAddress) {
 }
 
 int main(Array<String^>^ args) {
+	cout << "main()" << std::endl ;
+	
 	Microsoft::WRL::Wrappers::RoInitializeWrapper initialize(RO_INIT_MULTITHREADED);
 
 	CoInitializeSecurity(
@@ -84,13 +99,20 @@ int main(Array<String^>^ args) {
 	Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher^ bleAdvertisementWatcher = ref new Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher();
 	bleAdvertisementWatcher->ScanningMode = Bluetooth::Advertisement::BluetoothLEScanningMode::Active;
 	bleAdvertisementWatcher->Received += ref new Windows::Foundation::TypedEventHandler<Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher ^, Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs ^>(
-		[bleAdvertisementWatcher](Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher ^watcher, Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs^ eventArgs) {
+		[bleAdvertisementWatcher](
+			Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher ^watcher, 
+			Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs^ eventArgs) {
 		auto serviceUuids = eventArgs->Advertisement->ServiceUuids;
 		unsigned int index = -1;
+		cout << "serviceUUID (the filter): " << serviceUUID << std::endl; 
+		cout << "serviceUuids (the current ble device detected): " << serviceUuids << std::endl; 
+		cout << "if( " << serviceUuids->IndexOf(serviceUUID, &index) << " )" << std::endl; 
 		if (serviceUuids->IndexOf(serviceUUID, &index)) {
+			cout << "the condition of the current Uuid is good" << std::endl;
 			String^ strAddress = ref new String(formatBluetoothAddress(eventArgs->BluetoothAddress).c_str());
 			std::wcout << "Target service found on device: " << strAddress->Data() << std::endl;
-
+			cout << "We found the device at the address: " << strAddress->Data() << std::endl;
+			cout << "Stop the scanner" << std::endl;
 			bleAdvertisementWatcher->Stop();
 
 			connectToBulb(eventArgs->BluetoothAddress);
